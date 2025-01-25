@@ -1,17 +1,16 @@
 from __future__ import annotations
-from typing import Callable
 
-from math import ceil
+from collections import namedtuple
 from copy import deepcopy
 from functools import partial
-from collections import namedtuple
-
-import tqdm
+from math import ceil
+from typing import Callable
 
 import torch
-from torch import nn, stack, cat
 import torch.nn.functional as F
-from torch.nn import Module, ModuleList, Linear
+import tqdm
+from torch import Tensor, cat, nn, stack
+from torch.nn import Linear, Module, ModuleList
 
 # flex attention
 # https://pytorch.org/blog/flexattention/
@@ -19,12 +18,13 @@ from torch.nn import Module, ModuleList, Linear
 flex_attention = None
 
 try:
-    from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+    from torch.nn.attention.flex_attention import (create_block_mask,
+                                                   flex_attention)
 
     if torch.cuda.is_available():
         flex_attention = torch.compile(flex_attention)
 except ImportError:
-    pass
+    raise ImportError("You need to be on the latest pytorch with a cuda device available")
 
 
 def create_mac_block_mask(seq_len, window_size, persist_mem_len, sliding=False):
@@ -55,8 +55,14 @@ def create_mac_block_mask(seq_len, window_size, persist_mem_len, sliding=False):
 
 # einstein notation related
 
-from einops import repeat, rearrange, pack, unpack
+from axial_positional_embedding import ContinuousAxialPositionalEmbedding
+from einops import pack, rearrange, repeat, unpack
 from einops.layers.torch import Rearrange
+from hyper_connections import get_init_and_expand_reduce_stream_functions
+from rotary_embedding_torch import RotaryEmbedding
+from x_transformers.attend import Attend
+
+from titans_pytorch.neural_memory import NeuralMemory
 
 # b - batch
 # n - sequence
@@ -65,17 +71,12 @@ from einops.layers.torch import Rearrange
 
 # absolute and relative positions
 
-from axial_positional_embedding import ContinuousAxialPositionalEmbedding
-from rotary_embedding_torch import RotaryEmbedding
 
 # hyper connections / attend from x-transformers, which handles different queries and key lengths better
 
-from x_transformers.attend import Attend
-from hyper_connections import get_init_and_expand_reduce_stream_functions
 
 # proposed neural memory
 
-from titans_pytorch.neural_memory import NeuralMemory
 
 # constants
 
@@ -90,7 +91,7 @@ def exists(v):
     return v is not None
 
 
-def default(v, d):
+def default[_T](v, d: _T) -> _T:
     return v if exists(v) else d
 
 
@@ -110,10 +111,10 @@ def round_down_multiple(seq, mult):
     return seq // mult * mult
 
 
-def pack_with_inverse(t, pattern):
+def pack_with_inverse(t, pattern: str):
     packed, packed_shape = pack(t, pattern)
 
-    def inverse(out, inv_pattern=None):
+    def inverse(out, inv_pattern: str | None = None):
         return unpack(out, packed_shape, default(inv_pattern, pattern))
 
     return packed, inverse
@@ -276,6 +277,7 @@ class SegmentedAttention(Module):
         orig_v = v
 
         if exists(self.to_learned_v_mix):
+            assert self.to_learned_v_mix
             mix = self.to_learned_v_mix(token)
             v = v.lerp(value_residual, mix)
 
@@ -342,6 +344,7 @@ class SegmentedAttention(Module):
         orig_v = v
 
         if exists(self.to_learned_v_mix):
+            assert self.to_learned_v_mix
             mix = self.to_learned_v_mix(seq)
             v = v.lerp(value_residual, mix)
 
@@ -372,10 +375,12 @@ class SegmentedAttention(Module):
                 self.sliding,
             )
 
+            assert flex_attention
             flex_attn_fn = partial(flex_attention, block_mask=block_mask)
 
         # attention
 
+        assert flex_attn_fn
         out = flex_attn_fn(q, k, v)
 
         out = self.merge_heads(out)
@@ -437,6 +442,7 @@ class SegmentedAttention(Module):
         orig_v = v
 
         if exists(self.to_learned_v_mix):
+            assert self.to_learned_v_mix
             mix = self.to_learned_v_mix(seq)
             v = v.lerp(value_residual, mix)
 
@@ -807,6 +813,7 @@ class MemoryAsContextTransformer(Module):
                 self.num_persist_mem_tokens,
                 self.sliding_window_attn,
             )
+            assert flex_attention
             flex_attn_fn = partial(flex_attention, block_mask=block_mask)
 
         # kv caching
@@ -816,6 +823,7 @@ class MemoryAsContextTransformer(Module):
         if not exists(cache):
             cache = (seq_len_with_mem - 1, None, None)
 
+        assert cache
         inference_seq_index, kv_caches, neural_mem_caches = cache
 
         kv_caches = iter(default(kv_caches, []))
@@ -848,7 +856,7 @@ class MemoryAsContextTransformer(Module):
 
         x = self.expand_streams(x)
 
-        for mem_hyper_conn, mem, attn, ff in self.layers:
+        for mem_hyper_conn, mem, attn, ff in self.layers:  # type: ignore
 
             retrieved = None
             attn_out_gates = None
@@ -861,7 +869,11 @@ class MemoryAsContextTransformer(Module):
                 mem_input, add_residual = mem_hyper_conn(x)
 
                 if not is_inferencing:
-                    (retrieved, next_neural_mem_cache, next_mem_value_residual,), mem_kv_aux_loss = mem(
+                    (
+                        retrieved,
+                        next_neural_mem_cache,
+                        next_mem_value_residual,
+                    ), mem_kv_aux_loss = mem(
                         mem_input,
                         return_aux_kv_loss=True,
                         return_values=True,
@@ -872,7 +884,11 @@ class MemoryAsContextTransformer(Module):
                     kv_recon_losses = kv_recon_losses + mem_kv_aux_loss
 
                 else:
-                    (retrieved, next_neural_mem_cache, next_mem_value_residual,) = mem.forward_inference(
+                    (
+                        retrieved,
+                        next_neural_mem_cache,
+                        next_mem_value_residual,
+                    ) = mem.forward_inference(
                         mem_input,
                         state=next(neural_mem_caches, None),
                         return_values=True,
