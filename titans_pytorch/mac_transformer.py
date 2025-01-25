@@ -631,12 +631,15 @@ class MemoryAsContextTransformer(Module):
 
             self.layers.append(
                 ModuleList(
-                    [
-                        mem_hyper_conn,
-                        mem,
-                        init_hyper_conn(dim=dim, branch=attn),
-                        init_hyper_conn(dim=dim, branch=ff),
-                    ]
+                    filter(
+                        None,
+                        [
+                            mem_hyper_conn,
+                            mem,
+                            init_hyper_conn(dim=dim, branch=attn),
+                            init_hyper_conn(dim=dim, branch=ff),
+                        ],
+                    )
                 )
             )
 
@@ -750,6 +753,7 @@ class MemoryAsContextTransformer(Module):
         factorized_pos_emb=None,
     ):
 
+        labels = None
         if return_loss:
             x, labels = x[:, :-1], x[:, 1:]
 
@@ -932,6 +936,7 @@ class MemoryAsContextTransformer(Module):
         # taking care of cache first
         # for early return when processing long term mem tokens during inference
 
+        next_cache = None
         if return_cache:
             next_kv_caches = stack([stack(kv_cache) for kv_cache in next_kv_caches])
 
@@ -983,6 +988,7 @@ class MemoryAsContextTransformer(Module):
 
             return logits, next_cache
 
+        assert labels
         ar_loss = F.cross_entropy(rearrange(logits, "b n l -> b l n"), labels)
 
         losses = ar_loss
