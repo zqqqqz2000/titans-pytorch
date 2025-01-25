@@ -36,9 +36,7 @@ w - num memory network weight parameters
 
 LinearNoBias = partial(Linear, bias=False)
 
-NeuralMemCache = namedtuple(
-    "NeuralMemCache", ["seq", "cache_store_segment", "states", "updates"]
-)
+NeuralMemCache = namedtuple("NeuralMemCache", ["seq", "cache_store_segment", "states", "updates"])
 
 # functions
 
@@ -207,9 +205,7 @@ class AssocScan(Module):
 
         def accelerate_scan_fn(gates, inputs):
             gates = gates.expand_as(inputs)
-            gates, inputs = tuple(
-                rearrange(t, "b n d -> b d n") for t in (gates, inputs)
-            )
+            gates, inputs = tuple(rearrange(t, "b n d -> b d n") for t in (gates, inputs))
 
             seq_len = gates.shape[-1]
             next_power_two_seq_len = 2 ** max(5, int(math.ceil(math.log2(seq_len))))
@@ -281,9 +277,7 @@ class NeuralMemory(Module):
         self.retrieve_norm = nn.RMSNorm(dim) if pre_rmsnorm else nn.Identity()
         self.store_norm = nn.RMSNorm(dim) if pre_rmsnorm else nn.Identity()
 
-        self.multihead_rmsnorm = (
-            MultiheadRMSNorm(dim_head, heads) if post_rmsnorm else nn.Identity()
-        )
+        self.multihead_rmsnorm = MultiheadRMSNorm(dim_head, heads) if post_rmsnorm else nn.Identity()
 
         self.q_norm = MultiheadRMSNorm(dim_head, heads) if qk_rmsnorm else nn.Identity()
         self.k_norm = MultiheadRMSNorm(dim_head, heads) if qk_rmsnorm else nn.Identity()
@@ -296,16 +290,10 @@ class NeuralMemory(Module):
 
         self.split_heads = Rearrange("b n (h d) -> b h n d", h=heads)
         self.merge_heads = Rearrange("b h n d -> b n (h d)")
-        self.combine_heads = (
-            LinearNoBias(dim_inner, dim) if heads > 1 else nn.Identity()
-        )
+        self.combine_heads = LinearNoBias(dim_inner, dim) if heads > 1 else nn.Identity()
 
         self.retrieve_gate = (
-            Sequential(
-                LinearNoBias(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid()
-            )
-            if heads > 1
-            else None
+            Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid()) if heads > 1 else None
         )
 
         # memory mlp
@@ -313,9 +301,7 @@ class NeuralMemory(Module):
         if not exists(model):
             model = MemoryMLP(dim_head, **default_model_kwargs)
 
-        assert not exists(
-            next(model.buffers(), None)
-        ), "model cannot have buffers for now"
+        assert not exists(next(model.buffers(), None)), "model cannot have buffers for now"
 
         # the memory is the weights of the model
 
@@ -331,9 +317,7 @@ class NeuralMemory(Module):
 
         def forward_and_loss(params, inputs, loss_weights, target):
             pred = functional_call(self.memory_model, params, inputs)
-            loss = self.store_memory_loss_fn(
-                pred, target
-            )  # simple mse loss in paper - eq (12) - |M(k) - v|²
+            loss = self.store_memory_loss_fn(pred, target)  # simple mse loss in paper - eq (12) - |M(k) - v|²
             weighted_loss = loss * loss_weights
             return weighted_loss.sum(), weighted_loss.mean()
 
@@ -356,9 +340,7 @@ class NeuralMemory(Module):
         # value residual learning
 
         self.learned_value_residual = (
-            Sequential(
-                LinearNoBias(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid()
-            )
+            Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid())
             if accept_value_residual
             else None
         )
@@ -385,20 +367,12 @@ class NeuralMemory(Module):
 
         # learned adaptive learning rate and momentum
 
-        self.to_momentum = (
-            Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n 1"))
-            if momentum
-            else None
-        )
+        self.to_momentum = Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n 1")) if momentum else None
 
-        self.to_adaptive_step = Sequential(
-            LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n")
-        )
+        self.to_adaptive_step = Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n"))
 
         if not exists(adaptive_step_transform):
-            adaptive_step_transform = partial(
-                default_adaptive_step_transform, max_lr=default_step_transform_max_lr
-            )
+            adaptive_step_transform = partial(default_adaptive_step_transform, max_lr=default_step_transform_max_lr)
 
         self.adaptive_step_transform = adaptive_step_transform
 
@@ -422,9 +396,7 @@ class NeuralMemory(Module):
 
         # weight decay factor
 
-        self.to_decay_factor = Sequential(
-            LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n 1")
-        )
+        self.to_decay_factor = Sequential(LinearNoBias(dim, heads), Rearrange("b n h -> (b h) n 1"))
 
         # maybe use accelerated scan
 
@@ -508,9 +480,7 @@ class NeuralMemory(Module):
             adaptive_momentum = self.to_momentum(chunked_seq).sigmoid()
 
         if need_layer_lr_mod:
-            layer_lr_mod = (
-                self.to_layer_modulation(chunked_seq) * self.max_mem_layer_modulation
-            )
+            layer_lr_mod = self.to_layer_modulation(chunked_seq) * self.max_mem_layer_modulation
 
         # keys and values
 
@@ -536,10 +506,7 @@ class NeuralMemory(Module):
 
         # take care of chunking
 
-        keys, values = tuple(
-            rearrange(t, "b h (n c) d -> (b h n) c d", c=chunk_size)
-            for t in (keys, values)
-        )
+        keys, values = tuple(rearrange(t, "b h (n c) d -> (b h n) c d", c=chunk_size) for t in (keys, values))
 
         adaptive_lr = rearrange(adaptive_lr, "b (n c) -> (b n) c", c=chunk_size)
 
@@ -550,9 +517,7 @@ class NeuralMemory(Module):
 
         # get grads and extra auxiliary loss (for backwarding through qkv projection in base neural memory module)
 
-        grads, aux_kv_recon_loss = per_sample_grad_fn(
-            dict(weights), keys, adaptive_lr, values
-        )
+        grads, aux_kv_recon_loss = per_sample_grad_fn(dict(weights), keys, adaptive_lr, values)
 
         grads = TensorDict(grads)
 
@@ -563,9 +528,7 @@ class NeuralMemory(Module):
 
         # restore batch and sequence dimension
 
-        grads = grads.apply(
-            lambda t: rearrange(t, "(b n) ... -> b n ...", b=batch * heads)
-        )
+        grads = grads.apply(lambda t: rearrange(t, "(b n) ... -> b n ...", b=batch * heads))
 
         # maybe per layer modulation
 
@@ -682,9 +645,7 @@ class NeuralMemory(Module):
 
         # fetch values from memory model
 
-        curr_weights = curr_weights.apply(
-            lambda t: rearrange(t, "b n ... -> (b n) ...")
-        )
+        curr_weights = curr_weights.apply(lambda t: rearrange(t, "b n ... -> (b n) ..."))
         queries = rearrange(queries, "b h (n c) d -> (b h n) c d", c=chunk_size)
 
         # forward functional call
@@ -710,9 +671,7 @@ class NeuralMemory(Module):
 
         # restore, pad with empty memory embed
 
-        empty_memory_embeds = self.init_empty_memory_embed(
-            values.shape[0], chunk_size - 1
-        )
+        empty_memory_embeds = self.init_empty_memory_embed(values.shape[0], chunk_size - 1)
         values = torch.cat((empty_memory_embeds, values), dim=-2)
 
         return values[:, :seq_len]
@@ -753,9 +712,7 @@ class NeuralMemory(Module):
         if curr_seq_len < self.chunk_size:
             empty_mem = self.init_empty_memory_embed(batch, 1)
 
-            output = empty_mem, NeuralMemCache(
-                curr_seq_len, cache_store_seq, past_states, updates
-            )
+            output = empty_mem, NeuralMemCache(curr_seq_len, cache_store_seq, past_states, updates)
 
             if return_values:
                 output = (*output, self.zero)

@@ -50,28 +50,21 @@ def associative_scan(operator: Callable, elems: tuple[Tensor, Tensor]):
 
         # Combine adjacent pairs of elements.
 
-        reduced_elems = operator(
-            [elem[:, :-1:2] for elem in elems], [elem[:, 1::2] for elem in elems]
-        )
+        reduced_elems = operator([elem[:, :-1:2] for elem in elems], [elem[:, 1::2] for elem in elems])
 
         # Recursively compute scan for partially reduced tensors.
 
         odd_elems = _scan(reduced_elems)
 
         if num_elems % 2 == 0:
-            even_elems = operator(
-                [e[:, :-1] for e in odd_elems], [e[:, 2::2] for e in elems]
-            )
+            even_elems = operator([e[:, :-1] for e in odd_elems], [e[:, 2::2] for e in elems])
         else:
             even_elems = operator(odd_elems, [e[:, 2::2] for e in elems])
 
         # The first element of a scan is the same as the first element
         # of the original `elems`.
 
-        even_elems = [
-            torch.cat([elem[:, :1], result], dim=1)
-            for (elem, result) in zip(elems, even_elems)
-        ]
+        even_elems = [torch.cat([elem[:, :1], result], dim=1) for (elem, result) in zip(elems, even_elems)]
 
         return list(map(_interleave, even_elems, odd_elems))
 

@@ -7,9 +7,7 @@ from torch.nn import Module, ModuleList, Parameter, ParameterList
 class MemoryMLP(Module):
     def __init__(self, dim, depth):
         super().__init__()
-        self.weights = ParameterList(
-            [Parameter(torch.randn(dim, dim)) for _ in range(depth)]
-        )
+        self.weights = ParameterList([Parameter(torch.randn(dim, dim)) for _ in range(depth)])
 
         for weight in self.weights:
             nn.init.xavier_uniform_(weight)
@@ -132,9 +130,7 @@ class MemoryAttention(Module):
         k = F.normalize(x @ wk, dim=-1)
         v = x @ wv
 
-        attn_out = F.scaled_dot_product_attention(
-            q, k, v, scale=self.scale, is_causal=True
-        )
+        attn_out = F.scaled_dot_product_attention(q, k, v, scale=self.scale, is_causal=True)
 
         x = x + attn_out
 

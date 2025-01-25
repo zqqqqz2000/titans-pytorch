@@ -81,9 +81,7 @@ from titans_pytorch.neural_memory import NeuralMemory
 
 LinearNoBias = partial(Linear, bias=False)
 
-AttnIntermediates = namedtuple(
-    "AttnIntermediates", ("value_residual", "cached_key_values")
-)
+AttnIntermediates = namedtuple("AttnIntermediates", ("value_residual", "cached_key_values"))
 
 # helpers
 
@@ -127,9 +125,7 @@ def pad_at_dim(t, pad, dim=-1, value=0.0):
     return F.pad(t, (*zeros, *pad), value=value)
 
 
-def pad_and_segment_with_inverse(
-    seq, segment_len, fold_into_batch=True, inverse_remove_pad=True
-):
+def pad_and_segment_with_inverse(seq, segment_len, fold_into_batch=True, inverse_remove_pad=True):
     batch, seq_len = seq.shape[:2]
     next_seq_len_mult = round_up_multiple(seq_len, segment_len)
 
@@ -231,9 +227,7 @@ class SegmentedAttention(Module):
         self.to_out = LinearNoBias(dim_inner, dim)
 
         self.to_learned_v_mix = (
-            nn.Sequential(
-                nn.Linear(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid()
-            )
+            nn.Sequential(nn.Linear(dim, heads), Rearrange("b n h -> b h n 1"), nn.Sigmoid())
             if accept_value_residual
             else None
         )
@@ -249,9 +243,7 @@ class SegmentedAttention(Module):
         self.split_heads = Rearrange("b n (h d) -> b h n d", h=heads)
         self.merge_heads = Rearrange("b h n d -> b n (h d)")
 
-        self.persistent_memory = nn.Parameter(
-            torch.zeros(2, heads, num_persist_mem_tokens, dim_head)
-        )
+        self.persistent_memory = nn.Parameter(torch.zeros(2, heads, num_persist_mem_tokens, dim_head))
 
         # flex attn related
 
@@ -408,9 +400,7 @@ class SegmentedAttention(Module):
 
         if is_inferencing:
             assert seq.shape[-2] == 1
-            return self.forward_inference(
-                seq, cache, value_residual, output_gating=output_gating
-            )
+            return self.forward_inference(seq, cache, value_residual, output_gating=output_gating)
 
         if seq.is_cuda and self.use_flex_attn and not disable_flex_attn:
             return self.forward_flex(
@@ -433,9 +423,7 @@ class SegmentedAttention(Module):
 
         # auto pad to multiple
 
-        seq, inverse_segment = pad_and_segment_with_inverse(
-            seq, total_segment_len, fold_into_batch=False
-        )
+        seq, inverse_segment = pad_and_segment_with_inverse(seq, total_segment_len, fold_into_batch=False)
 
         # attention
 
@@ -462,10 +450,7 @@ class SegmentedAttention(Module):
 
         # fold
 
-        q, k, v = tuple(
-            rearrange(t, "b h (w n) d -> (b w) h n d", n=total_segment_len)
-            for t in (q, k, v)
-        )
+        q, k, v = tuple(rearrange(t, "b h (w n) d -> (b w) h n d", n=total_segment_len) for t in (q, k, v))
 
         # maybe sliding for cpu
 
@@ -489,9 +474,7 @@ class SegmentedAttention(Module):
             k_idx = rearrange(k_idx, "w j -> w 1 j")
 
             sliding_mask = (q_idx - k_idx) <= total_segment_len
-            sliding_mask = F.pad(
-                sliding_mask, (self.num_persist_mem_tokens, 0), value=True
-            )
+            sliding_mask = F.pad(sliding_mask, (self.num_persist_mem_tokens, 0), value=True)
 
             sliding_mask = repeat(sliding_mask, "w i j -> (b w) 1 i j", b=batch)
             attend_kwargs.update(mask=sliding_mask)
@@ -556,9 +539,7 @@ class MemoryAsContextTransformer(Module):
 
         self.token_emb = nn.Embedding(num_tokens, dim)
 
-        self.axial_pos_emb = ContinuousAxialPositionalEmbedding(
-            dim=dim, num_axial_dims=2
-        )
+        self.axial_pos_emb = ContinuousAxialPositionalEmbedding(dim=dim, num_axial_dims=2)
 
         # long term mem tokens
 
@@ -567,9 +548,7 @@ class MemoryAsContextTransformer(Module):
         self.num_longterm_mem_tokens = num_longterm_mem_tokens
         has_longterm_mems = num_longterm_mem_tokens > 0
 
-        self.longterm_mems = nn.Parameter(
-            torch.randn(num_longterm_mem_tokens, dim) * 0.02
-        )
+        self.longterm_mems = nn.Parameter(torch.randn(num_longterm_mem_tokens, dim) * 0.02)
 
         # maybe sliding window attn
 
@@ -582,15 +561,11 @@ class MemoryAsContextTransformer(Module):
             init_hyper_conn,
             self.expand_streams,
             self.reduce_streams,
-        ) = get_init_and_expand_reduce_stream_functions(
-            num_residual_streams, disable=num_residual_streams == 1
-        )
+        ) = get_init_and_expand_reduce_stream_functions(num_residual_streams, disable=num_residual_streams == 1)
 
         self.layers = ModuleList([])
 
-        self.neural_memory_segment_len = default(
-            neural_memory_segment_len, num_longterm_mem_tokens + segment_len
-        )
+        self.neural_memory_segment_len = default(neural_memory_segment_len, num_longterm_mem_tokens + segment_len)
 
         layers = tuple(range(1, depth + 1))
 
@@ -601,14 +576,10 @@ class MemoryAsContextTransformer(Module):
         maybe_copy = deepcopy if not weight_tie_memory_model else identity
 
         if weight_tie_memory_model:
-            assert exists(
-                neural_memory_model
-            ), "`neural_memory_model` must be explicitly set"
+            assert exists(neural_memory_model), "`neural_memory_model` must be explicitly set"
 
         self.weight_tie_memory_model = weight_tie_memory_model
-        self.prev_neural_mem_update_for_weights = default(
-            prev_neural_mem_update_for_weights, weight_tie_memory_model
-        )
+        self.prev_neural_mem_update_for_weights = default(prev_neural_mem_update_for_weights, weight_tie_memory_model)
 
         # value residual learning for neural memory
 
@@ -638,16 +609,13 @@ class MemoryAsContextTransformer(Module):
             mem_hyper_conn = None
 
             if layer in neural_memory_layers:
-                mem_hyper_conn = init_hyper_conn(
-                    dim=dim, add_branch_out_to_residual=not neural_mem_gate_attn_output
-                )
+                mem_hyper_conn = init_hyper_conn(dim=dim, add_branch_out_to_residual=not neural_mem_gate_attn_output)
 
                 mem = NeuralMemory(
                     dim=dim,
                     chunk_size=self.neural_memory_segment_len,
                     model=maybe_copy(neural_memory_model),
-                    accept_value_residual=not is_first_mem
-                    and neural_memory_add_value_residual,
+                    accept_value_residual=not is_first_mem and neural_memory_add_value_residual,
                     **neural_memory_kwargs,
                 )
 
@@ -729,9 +697,7 @@ class MemoryAsContextTransformer(Module):
         if use_cache:
             seq_len_with_mem = self.seq_len_with_longterm_mem(seq_len)
 
-            axial_dims = self.axial_pos_emb.maybe_derive_outer_dim(
-                seq_len_with_mem, (self.neural_memory_segment_len,)
-            )
+            axial_dims = self.axial_pos_emb.maybe_derive_outer_dim(seq_len_with_mem, (self.neural_memory_segment_len,))
 
             factorized_pos_emb = self.axial_pos_emb(axial_dims, return_factorized=True)
 
@@ -808,9 +774,7 @@ class MemoryAsContextTransformer(Module):
 
         # intersperse longterm memory
 
-        x, inverse_segment = pad_and_segment_with_inverse(
-            x, segment_len, inverse_remove_pad=False
-        )
+        x, inverse_segment = pad_and_segment_with_inverse(x, segment_len, inverse_remove_pad=False)
 
         mems = repeat(self.longterm_mems, "n d -> b n d", b=x.shape[0])
         x, inverse_pack_mems = pack_with_inverse((x, mems), "b * d")
@@ -897,11 +861,7 @@ class MemoryAsContextTransformer(Module):
                 mem_input, add_residual = mem_hyper_conn(x)
 
                 if not is_inferencing:
-                    (
-                        retrieved,
-                        next_neural_mem_cache,
-                        next_mem_value_residual,
-                    ), mem_kv_aux_loss = mem(
+                    (retrieved, next_neural_mem_cache, next_mem_value_residual,), mem_kv_aux_loss = mem(
                         mem_input,
                         return_aux_kv_loss=True,
                         return_values=True,
@@ -912,11 +872,7 @@ class MemoryAsContextTransformer(Module):
                     kv_recon_losses = kv_recon_losses + mem_kv_aux_loss
 
                 else:
-                    (
-                        retrieved,
-                        next_neural_mem_cache,
-                        next_mem_value_residual,
-                    ) = mem.forward_inference(
+                    (retrieved, next_neural_mem_cache, next_mem_value_residual,) = mem.forward_inference(
                         mem_input,
                         state=next(neural_mem_caches, None),
                         return_values=True,
@@ -969,9 +925,7 @@ class MemoryAsContextTransformer(Module):
 
             kv_cache_length = next_kv_caches.shape[-2]
 
-            if not self.sliding_window_attn and divisible_by(
-                kv_cache_length, attn_window_size
-            ):
+            if not self.sliding_window_attn and divisible_by(kv_cache_length, attn_window_size):
                 next_kv_caches = next_kv_caches[..., 0:0, :]
 
             next_cache = (
@@ -993,9 +947,7 @@ class MemoryAsContextTransformer(Module):
 
         if not is_inferencing:
 
-            x, inverse_segment = pad_and_segment_with_inverse(
-                x, attn_window_size, inverse_remove_pad=False
-            )
+            x, inverse_segment = pad_and_segment_with_inverse(x, attn_window_size, inverse_remove_pad=False)
 
             x, _ = inverse_pack_mems(x)
 
