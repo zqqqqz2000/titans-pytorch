@@ -26,6 +26,7 @@ classifiers=[
 
 dependencies = [
     "accelerated-scan>=0.2.0",
+    "adam-atan2-pytorch>=0.1.18",
     "axial_positional_embedding>=0.3.10",
     "einops>=0.8.0",
     "einx>=0.3.0",
@@ -35,7 +36,8 @@ dependencies = [
     "tensordict",
     "torch>=2.2",
     "tqdm",
-    "x-transformers"
+    "wandb>=0.19.4",
+    "x-transformers",
 ]
 
 [project.urls]

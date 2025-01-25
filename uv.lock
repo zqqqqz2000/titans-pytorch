@@ -1122,6 +1122,7 @@ version = "0.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "accelerated-scan" },
+    { name = "adam-atan2-pytorch" },
     { name = "axial-positional-embedding" },
     { name = "einops" },
     { name = "einx" },
@@ -1131,6 +1132,7 @@ dependencies = [
     { name = "tensordict" },
     { name = "torch" },
     { name = "tqdm" },
+    { name = "wandb" },
     { name = "x-transformers" },
 ]
 
@@ -1146,6 +1148,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "accelerated-scan", specifier = ">=0.2.0" },
+    { name = "adam-atan2-pytorch", specifier = ">=0.1.18" },
     { name = "adam-atan2-pytorch", marker = "extra == 'examples'", specifier = ">=0.1.18" },
     { name = "axial-positional-embedding", specifier = ">=0.3.10" },
     { name = "einops", specifier = ">=0.8.0" },
@@ -1157,6 +1160,7 @@ requires-dist = [
     { name = "tensordict" },
     { name = "torch", specifier = ">=2.2" },
     { name = "tqdm" },
+    { name = "wandb", specifier = ">=0.19.4" },
     { name = "wandb", marker = "extra == 'examples'" },
     { name = "x-transformers" },
 ]
